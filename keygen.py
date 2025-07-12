@@ -53,7 +53,7 @@ def extended_gcd(a, b):
     y = x1 - (a // b) * y1
     return g, x, y
 
-def generate_rsa_keys(bits=2048):
+def gerador_chaves_rsa(bits=2048):
     #Gera par de chaves RSA com primos de tamanho `bits`/2
     print("Gerando primos...")
     p = gera_primo_grande(bits // 2)
