@@ -2,13 +2,13 @@ import random
 from math import gcd
 
 def eh_primo(n, k=40):
-    """Teste de primalidade de Miller-Rabin."""
+    #Teste de primalidade de Miller-Rabin
     if n == 2 or n == 3:
         return True
     if n <= 1 or n % 2 == 0:
         return False
 
-    # Escreve n-1 como 2^r * d
+    #Escreve n-1 como 2^r * d
     r, d = 0, n - 1
     while d % 2 == 0:
         r += 1
@@ -29,8 +29,8 @@ def eh_primo(n, k=40):
             return False
     return True
 
-def generate_large_prime(bits):
-    """Gera um primo de `bits` bits."""
+def gera_primo_grande(bits):
+    #Gera um numero primo grande
     while True:
         p = random.getrandbits(bits)
         p |= (1 << bits - 1) | 1  # garante que tem `bits` bits e é ímpar
@@ -38,14 +38,14 @@ def generate_large_prime(bits):
             return p
 
 def modinv(a, m):
-    """Inverso modular usando o algoritmo extendido de Euclides."""
+    #Inverso modular usando o algoritmo extendido de Euclides
     g, x, _ = extended_gcd(a, m)
     if g != 1:
         raise Exception('Inverso modular não existe')
     return x % m
 
 def extended_gcd(a, b):
-    """Algoritmo de Euclides extendido."""
+    #Algoritmo de Euclides extendido
     if b == 0:
         return a, 1, 0
     g, x1, y1 = extended_gcd(b, a % b)
@@ -54,12 +54,12 @@ def extended_gcd(a, b):
     return g, x, y
 
 def generate_rsa_keys(bits=2048):
-    """Gera par de chaves RSA com primos de tamanho `bits`/2."""
+    #Gera par de chaves RSA com primos de tamanho `bits`/2
     print("Gerando primos...")
-    p = generate_large_prime(bits // 2)
-    q = generate_large_prime(bits // 2)
+    p = gera_primo_grande(bits // 2)
+    q = gera_primo_grande(bits // 2)
     while q == p:
-        q = generate_large_prime(bits // 2)
+        q = gera_primo_grande(bits // 2)
 
     n = p * q
     phi = (p - 1) * (q - 1)
