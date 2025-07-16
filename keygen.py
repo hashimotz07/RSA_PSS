@@ -1,5 +1,6 @@
 import random
 from math import gcd
+import time
 
 def eh_primo(n, k=40):
     #Teste de primalidade de Miller-Rabin
@@ -55,11 +56,19 @@ def extended_gcd(a, b):
 
 def gerador_chaves_rsa(bits=2048):
     #Gera par de chaves RSA com primos de tamanho `bits`/2
-    print("Gerando primos...")
+    log = open("log.txt","a")
+    log.write("Gerando primos. . .\n")
+    start_time = time.time()  # tempo inicial
+
     p = gera_primo_grande(bits // 2)
     q = gera_primo_grande(bits // 2)
     while q == p:
         q = gera_primo_grande(bits // 2)
+    
+    end_time = time.time()  # tempo final após gerar os primos
+    
+    tempo_geracao_primos = end_time - start_time
+    log.write(f"Primos gerados em {tempo_geracao_primos:.4f} segundos.\n")
 
     n = p * q
     phi = (p - 1) * (q - 1)
@@ -74,4 +83,7 @@ def gerador_chaves_rsa(bits=2048):
 
     public_key = (e, n)
     private_key = (d, n)
+    
+    
+    
     return public_key, private_key

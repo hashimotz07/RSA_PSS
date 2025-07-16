@@ -1,12 +1,21 @@
 from keygen import gerador_chaves_rsa
-from utils import serialize_key, save_key_to_pem
+from utils import serialize_key, save_key_to_pem,int_to_bytes
 from rsa import cifrar_rsa_pss
 from hash_utils import hash_SHA_256, hash_SHA_256_msg_codificada
 from pss import generate_salt
+from rsa import pss_pad
+import base64
+open("log.txt","w")
+
+print("Olhe log.txt para ver o fluxo do codigo")
+log = open("log.txt","a")
+
 
 public, private = gerador_chaves_rsa(bits=2048)
-print("Chave pública (e, n):", public)
-print("Chave privada (d, n):", private)
+e, n = public
+d, m = private
+log.write(f"Chave publica ({e}, {n}):\n")
+log.write(f"Chave privada ({d}, {m}):\n")
 
 public_data = serialize_key(*public)
 private_data = serialize_key(*private)
@@ -14,18 +23,28 @@ private_data = serialize_key(*private)
 save_key_to_pem("public_key.pem", public_data, key_type="public")
 save_key_to_pem("private_key.pem", private_data, key_type="private")
 
-print("Chaves salvas com sucesso!")
+log.write("Chaves salvas com sucesso!\n")
 
-texto = "oi eu gostaria de tirar 10 no trabalho pois me esforcei muito."
-texto_hash = hash_SHA_256(texto)
+msg = "oi eu gostaria de tirar 10 no trabalho pois me esforcei muito."
+log.write(f"Mensagem original: {msg}\n")
+msg = msg.encode('utf-8')
 
-print(f'Texto hash: {texto_hash}')
-# print(f'Tamanho do hash')
+salt = generate_salt(32)
+log.write(f"salt: {salt}")
 
-salt = generate_salt()
 
-m = b'\x00\x00\x00\x00\x00\x00\x00\x00' + texto_hash + salt
+em_len = (n.bit_length() + 7) // 8
+EM = pss_pad(msg, salt, em_len, n)
 
-m_hash = hash_SHA_256_msg_codificada(m)
+EM_int = int.from_bytes(EM, byteorder='big')
+assinatura_int = pow(EM_int, d, n)
+assinatura_bytes = int_to_bytes(assinatura_int)
 
-print(m_hash)
+assinatura_b64 = base64.b64encode(assinatura_bytes).decode()
+with open("assinatura.sig", "w") as f:
+    f.write("-----BEGIN SIGNATURE-----\n")
+    for i in range(0, len(assinatura_b64), 64):
+        f.write(assinatura_b64[i:i+64] + "\n")
+    f.write("-----END SIGNATURE-----\n")
+
+log.write("Assinatura gerada com sucesso")
