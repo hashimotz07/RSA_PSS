@@ -4,7 +4,9 @@ from rsa import cifrar_rsa_pss
 from hash_utils import hash_SHA_256, hash_SHA_256_msg_codificada
 from pss import generate_salt
 from rsa import pss_pad
+import verify
 import base64
+
 open("log.txt","w")
 
 print("Olhe log.txt para ver o fluxo do codigo")
@@ -41,6 +43,8 @@ assinatura_int = pow(EM_int, d, n)
 assinatura_bytes = int_to_bytes(assinatura_int)
 
 assinatura_b64 = base64.b64encode(assinatura_bytes).decode()
+
+
 with open("assinatura.sig", "w") as f:
     f.write("-----BEGIN SIGNATURE-----\n")
     for i in range(0, len(assinatura_b64), 64):
@@ -48,3 +52,16 @@ with open("assinatura.sig", "w") as f:
     f.write("-----END SIGNATURE-----\n")
 
 log.write("Assinatura gerada com sucesso")
+
+
+with open("assinatura.sig", "r") as f:
+    assinatura_b64 = ''.join(
+        line.strip() for line in f if not line.startswith("-----"))
+
+
+chave_publica = verify.load_key_from_pem("public_key.pem")
+
+if verify.verificar_assinatura(msg, assinatura_b64, chave_publica):
+    print("Assinatura VÁLIDA ✅")
+else:
+    print("Assinatura INVÁLIDA ❌")
