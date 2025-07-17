@@ -1,67 +1,130 @@
-from keygen import gerador_chaves_rsa
-from utils import serialize_key, save_key_to_pem,int_to_bytes
-from rsa import cifrar_rsa_pss
-from hash_utils import hash_SHA_256, hash_SHA_256_msg_codificada
-from pss import generate_salt
-from rsa import pss_pad
-import verify
+import argparse
 import base64
+import sys
+from keygen import gerador_chaves_rsa
+from rsa import pss_pad
+from utils import serialize_key, save_key_to_pem, load_key_from_pem, int_to_bytes
+from pss import generate_salt
+import verify
 
-open("log.txt","w")
+def gerar_chaves(bits=2048):
+    """
+    Gera um par de chaves RSA (pública e privada) e salva em arquivos PEM.
+    """
+    try:
+        public, private = gerador_chaves_rsa(bits=bits)
+        
+        public_data = serialize_key(*public)
+        private_data = serialize_key(*private)
+        
+        save_key_to_pem("public_key.pem", public_data, key_type="public")
+        save_key_to_pem("private_key.pem", private_data, key_type="private")
+        
+        print("✅ Chaves 'public_key.pem' e 'private_key.pem' geradas com sucesso!")
+    except Exception as e:
+        print(f"❌ Erro ao gerar chaves: {e}", file=sys.stderr)
+        sys.exit(1)
 
-print("Olhe log.txt para ver o fluxo do codigo")
-log = open("log.txt","a")
+def assinar_arquivo(caminho_arquivo, caminho_chave_privada, caminho_saida):
+    """
+    Assina um arquivo usando uma chave privada e salva a assinatura.
+    """
+    try:
+        d, n = load_key_from_pem(caminho_chave_privada)
 
+        with open(caminho_arquivo, "rb") as f:
+            mensagem_bytes = f.read()
+        
+        salt = generate_salt(32) 
+        em_len = (n.bit_length() + 7) // 8
+        EM = pss_pad(mensagem_bytes, salt, em_len, n)
+        em_int = int.from_bytes(EM, byteorder='big')
+        assinatura_int = pow(em_int, d, n)
+        assinatura_bytes = int_to_bytes(assinatura_int)
+    
+        assinatura_b64 = base64.b64encode(assinatura_bytes).decode('utf-8')
 
-public, private = gerador_chaves_rsa(bits=2048)
-e, n = public
-d, m = private
-log.write(f"Chave publica ({e}, {n}):\n")
-log.write(f"Chave privada ({d}, {m}):\n")
+        # Salva a assinatura no formato PEM
+        with open(caminho_saida, "w") as f:
+            f.write("-----BEGIN SIGNATURE-----\n")
+            for i in range(0, len(assinatura_b64), 64):
+                f.write(assinatura_b64[i:i+64] + "\n")
+            f.write("-----END SIGNATURE-----\n")
+        
+        print(f"✒️ Arquivo '{caminho_arquivo}' assinado com sucesso. Assinatura salva em '{caminho_saida}'.")
 
-public_data = serialize_key(*public)
-private_data = serialize_key(*private)
+    except FileNotFoundError:
+        print(f"❌ Erro: Arquivo '{caminho_arquivo}' ou '{caminho_chave_privada}' não encontrado.", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"❌ Erro durante a assinatura: {e}", file=sys.stderr)
+        sys.exit(1)
 
-save_key_to_pem("public_key.pem", public_data, key_type="public")
-save_key_to_pem("private_key.pem", private_data, key_type="private")
+def verificar_arquivo(caminho_arquivo, caminho_assinatura, caminho_chave_publica):
+    """
+    Verifica a assinatura de um arquivo usando a chave pública.
+    """
+    try:
 
-log.write("Chaves salvas com sucesso!\n")
+        chave_publica = load_key_from_pem(caminho_chave_publica)
 
-msg = "oi eu gostaria de tirar 10 no trabalho pois me esforcei muito."
-log.write(f"Mensagem original: {msg}\n")
-msg = msg.encode('utf-8')
+        with open(caminho_arquivo, "rb") as f:
+            mensagem_bytes = f.read()
 
-salt = generate_salt(32)
-log.write(f"salt: {salt}")
+        with open(caminho_assinatura, "r") as f:
+            assinatura_b64 = ''.join(line.strip() for line in f if not line.startswith("-----"))
 
+        if verify.verificar_assinatura(mensagem_bytes, assinatura_b64, chave_publica):
+            print("Assinatura VÁLIDA ✅")
+        else:
+            print("Assinatura INVÁLIDA ❌")
 
-em_len = (n.bit_length() + 7) // 8
-EM = pss_pad(msg, salt, em_len, n)
+    except FileNotFoundError:
+        print(f"❌ Erro: Um dos arquivos não foi encontrado.", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"❌ Erro durante a verificação: {e}", file=sys.stderr)
+        sys.exit(1)
 
-EM_int = int.from_bytes(EM, byteorder='big')
-assinatura_int = pow(EM_int, d, n)
-assinatura_bytes = int_to_bytes(assinatura_int)
+def main():
+    """
+    Função principal para analisar os argumentos da linha de comando.
+    """
+    parser = argparse.ArgumentParser(
+        description="Sistema de assinatura de arquivos usando RSA-PSS.",
+        formatter_class=argparse.RawTextHelpFormatter
+    )
+    subparsers = parser.add_subparsers(dest='command', required=True, help='Comando a ser executado')
 
-assinatura_b64 = base64.b64encode(assinatura_bytes).decode()
+    parser_gerar = subparsers.add_parser('gerar', help='Gera um novo par de chaves RSA (pública e privada).')
+    parser_gerar.set_defaults(func=lambda args: gerar_chaves())
 
+    parser_assinar = subparsers.add_parser('assinar', help='Assina um arquivo usando uma chave privada.')
+    parser_assinar.add_argument('arquivo', help='Caminho para o arquivo a ser assinado.')
+    parser_assinar.add_argument('--chave', required=True, help='Caminho para o arquivo da chave privada (.pem).')
+    parser_assinar.add_argument('--saida', help='Nome do arquivo de saída para a assinatura. Padrão: [arquivo].sig')
+    parser_assinar.set_defaults(func=lambda args: assinar_arquivo(
+        args.arquivo, 
+        args.chave, 
+        args.saida or f"{args.arquivo}.sig"
+    ))
 
-with open("assinatura.sig", "w") as f:
-    f.write("-----BEGIN SIGNATURE-----\n")
-    for i in range(0, len(assinatura_b64), 64):
-        f.write(assinatura_b64[i:i+64] + "\n")
-    f.write("-----END SIGNATURE-----\n")
+    parser_verificar = subparsers.add_parser('verificar', help='Verifica a assinatura de um arquivo.')
+    parser_verificar.add_argument('arquivo', help='Caminho para o arquivo original.')
+    parser_verificar.add_argument('assinatura', help='Caminho para o arquivo de assinatura (.sig).')
+    parser_verificar.add_argument('--chave', required=True, help='Caminho para o arquivo da chave pública (.pem).')
+    parser_verificar.set_defaults(func=lambda args: verificar_arquivo(
+        args.arquivo, 
+        args.assinatura, 
+        args.chave
+    ))
 
-log.write("Assinatura gerada com sucesso")
+    if len(sys.argv) == 1:
+        parser.print_help(sys.stderr)
+        sys.exit(1)
+        
+    args = parser.parse_args()
+    args.func(args)
 
-
-with open("assinatura.sig", "r") as f:
-    assinatura_b64 = ''.join(
-        line.strip() for line in f if not line.startswith("-----"))
-
-
-chave_publica = verify.load_key_from_pem("public_key.pem")
-
-if verify.verificar_assinatura(msg, assinatura_b64, chave_publica):
-    print("Assinatura VÁLIDA ✅")
-else:
-    print("Assinatura INVÁLIDA ❌")
+if __name__ == '__main__':
+    main()
